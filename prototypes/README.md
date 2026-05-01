@@ -23,53 +23,13 @@ Dark scientific aesthetic. Six views: Cohort browser, Twin profile, Live telemet
 
 ### `aura_platform/` — Aura, family-facing product
 
-Warm cream/navy/terracotta palette. Seven views including the Heptagon data architecture, Session forecast, Treatment flow, and the Either-way safety net. For families and therapists.
-
----
-
-## Deploy to Vercel (recommended — gets you a live URL)
-
-Vercel is free for personal projects and connects directly to GitHub. Each prototype deploys independently to its own URL.
-
-### One-time: connect Vercel to GitHub
-
-1. Go to **https://vercel.com** and sign in with your GitHub account
-2. Click **"Add New" → "Project"**
-3. Find `asd-twin-research` in the list and click **"Import"**
-
-### Deploy the research_tool
-
-When Vercel asks how to configure the project:
-
-- **Project Name:** `asd-twin-research-tool` (or whatever you want)
-- **Framework Preset:** Vite (auto-detected)
-- **Root Directory:** click "Edit" → select `prototypes/research_tool`
-- **Build Command:** leave default (`npm run build`)
-- **Output Directory:** leave default (`dist`)
-
-Click **Deploy**. Wait 1–2 minutes. You'll get a URL like `https://asd-twin-research-tool.vercel.app`.
-
-### Deploy the aura_platform
-
-Repeat the import flow:
-
-1. Vercel dashboard → "Add New" → "Project"
-2. Find `asd-twin-research` again, click **Import**
-3. **Project Name:** `aura-twin-platform`
-4. **Root Directory:** click "Edit" → select `prototypes/aura_platform`
-5. Click **Deploy**
-
-You now have two live URLs.
-
-### Add the URLs to your README
-
-Once deployed, edit the main `README.md` and add a "Live demos" section near the top:
+Warm cream/navy/terracotta palette. Seven views, including the Heptagon data architecture, Session forecast, Treatment flow, and the Either-way safety net. For families and therapists.
 
 ```markdown
 ## Live demos
 
-- 🔬 [Research Dashboard](https://asd-twin-research-tool.vercel.app) — clinical analytics
-- 🌅 [Aura Platform](https://aura-twin-platform.vercel.app) — family/therapist product
+- 🔬 [Research Dashboard](https://asd-twin-research.vercel.app) — clinical analytics
+- 🌅 [Aura Platform](https://asd-twin-aura-platform.vercel.app) — family/therapist product
 ```
 
 Vercel automatically rebuilds and redeploys every time you push to GitHub. Your live demos stay in sync with your code.
