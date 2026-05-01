@@ -145,14 +145,12 @@ Anything reported in this analysis that wasn't pre-registered is explicitly flag
 
 ## Citation
 
-If this work informs your clinical practice or research, please cite:
-
 ```bibtex
 @misc{asd_twin_2026,
   title  = {ASD Digital Twin: A Clinical Data Science Investigation of Environmental Covariates in Behavioral Therapy Outcomes},
-  author = {<Your Name>},
+  author = {<Supriya Adapa>},
   year   = {2026},
-  url    = {https://github.com/<you>/asd-twin-research},
+  url    = {https://github.com/SupriyaAdapa-Developer/asd-twin-research},
   note   = {Pre-registered on OSF: <doi>}
 }
 ```
