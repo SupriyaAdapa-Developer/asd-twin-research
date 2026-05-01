@@ -32,8 +32,6 @@ Warm cream/navy/terracotta palette. Seven views, including the Heptagon data arc
 - 🌅 [Aura Platform](https://asd-twin-aura-platform.vercel.app) — family/therapist product
 ```
 
-Vercel automatically rebuilds and redeploys every time you push to GitHub. Your live demos stay in sync with your code.
-
 ---
 
 ## Run locally instead
@@ -45,17 +43,6 @@ cd prototypes/research_tool   # or prototypes/aura_platform
 npm install                   # downloads dependencies, ~30s, only needed once
 npm run dev                   # starts the dev server
 ```
-
-Open http://localhost:5173 in your browser. The app reloads automatically as you edit the code.
-
-To produce a static build:
-
-```bash
-npm run build                 # outputs to dist/
-npm run preview               # serves dist/ locally to preview
-```
-
----
 
 ## Tech stack
 
