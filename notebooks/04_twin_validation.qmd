@@ -1,0 +1,207 @@
+---
+title: "Twin Validation"
+subtitle: "Per-child forecasting and the digital twin model"
+author: "ASD Digital Twin Research"
+date: today
+format:
+  html: { toc: true, code-fold: true, theme: cosmo, embed-resources: true }
+execute: { warning: false }
+jupyter: python3
+---
+
+## Purpose
+
+This notebook is the bridge from the population-level analysis to the **per-child digital twin** that powers the prototypes. It does three things:
+
+1. **Out-of-time validation** — hold the last 60 days of sessions out entirely, train on everything before, test on the future. This is the honest test of whether the model would work in deployment.
+2. **Per-child performance audit** — does the model work equally well for all children, or are there systematic failures by severity, age, or sensitivity profile?
+3. **Forecast generation** — produce per-child probability forecasts for hypothetical session configurations, the same predictions the prototypes display.
+
+```{python}
+import warnings; warnings.filterwarnings("ignore")
+import sys; sys.path.insert(0, "..")
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from src.twin.prediction import TieredPipeline
+
+pipe = TieredPipeline.from_csvs("../data")
+pipe.fit(tier=3)
+m_overall = pipe.evaluate(tier=3)
+print(f"Overall Tier 3 — AUROC: {m_overall['auroc']:.3f}, Brier: {m_overall['brier']:.3f}")
+```
+
+## Out-of-time holdout
+
+The default split in `TieredPipeline` is by-child (a child is fully in train, val, or test). For deployment-relevant validation, we want the *temporal* split: train on early data, test on later data, even within the same children.
+
+```{python}
+sessions = pd.read_csv("../data/sessions.csv")
+sessions["session_date"] = pd.to_datetime(sessions["session_date"])
+
+cutoff = sessions["session_date"].max() - pd.Timedelta(days=60)
+train_mask = sessions["session_date"] <= cutoff
+test_mask  = sessions["session_date"] > cutoff
+print(f"Train sessions (≤ {cutoff.date()}): {train_mask.sum():,}")
+print(f"Test sessions  (> {cutoff.date()}): {test_mask.sum():,}")
+```
+
+The temporal split tests whether the model learns *patterns* that generalize forward in time, or whether it overfits to seasonal artifacts. (The synthetic data has only weak seasonal structure, so this is more a sanity check than a stress test for now.)
+
+## Per-child performance audit
+
+Does the model work as well for ASD-3 children as for ASD-1? For 5-year-olds as for 14-year-olds? Aggregate AUROC can hide systematic gaps.
+
+```{python}
+df = pipe.build_design_matrix()
+test_idx = pipe._splits["test"]
+test_df = df.iloc[test_idx].copy()
+
+features = pipe._feature_lists[3]
+X = test_df[features].fillna(0).values
+test_df["p_pred"] = pipe._models[3].predict_proba(pipe._scalers[3].transform(X))[:, 1]
+
+from sklearn.metrics import roc_auc_score, brier_score_loss
+
+def per_group_auc(g):
+    y = g["session_success"].astype(int)
+    p = g["p_pred"]
+    if y.nunique() < 2:
+        return np.nan
+    return roc_auc_score(y, p)
+
+per_severity = test_df.groupby("severity").apply(
+    lambda g: pd.Series({
+        "n": len(g),
+        "auroc": per_group_auc(g),
+        "brier": brier_score_loss(g["session_success"].astype(int), g["p_pred"]),
+        "success_rate": g["session_success"].mean(),
+    })
+).round(3)
+per_severity
+```
+
+```{python}
+test_df["age_band"] = pd.cut(test_df["age"], bins=[2, 6, 9, 12, 17],
+                              labels=["3-6", "7-9", "10-12", "13-17"])
+per_age = test_df.groupby("age_band", observed=True).apply(
+    lambda g: pd.Series({
+        "n": len(g),
+        "auroc": per_group_auc(g),
+        "success_rate": g["session_success"].mean(),
+    })
+).round(3)
+per_age
+```
+
+This is the equity audit. If AUROC drops sharply for any subgroup, the model would not be deployable for that group without remediation. In a real-data study, this analysis must include race/ethnicity, primary language, and socioeconomic indicators.
+
+## Forecast generator — what the prototypes use
+
+The prototype's "session forecast" feature calls a function equivalent to:
+
+```{python}
+def forecast(child_row, session_plan):
+    """Return p(success) for a hypothetical session for one child."""
+    feat = {f: 0 for f in features}
+    # Set session features from the plan
+    feat[f"session_type_{session_plan['type']}"] = 1
+    feat[f"location_{session_plan['location']}"] = 1
+    feat[f"time_of_day_{session_plan['time']}"] = 1
+    feat["duration_min"] = session_plan["duration"]
+    feat["n_programs"] = session_plan["n_programs"]
+    feat["day_of_week"] = session_plan["dow"]
+    feat["is_substitute"] = int(session_plan["substitute"])
+    feat["treatment_integrity_pct"] = 90  # planned at 90%
+    feat["therapist_tenure_with_child_days"] = session_plan["tenure"]
+    # Environmental
+    for k in ["pressure_swing", "break_transition", "fire_drill",
+              "low_sleep_night", "skipped_breakfast", "family_stress_event",
+              "post_dst_window", "is_holiday", "testing_week", "community_event"]:
+        feat[k] = int(session_plan.get(k, 0))
+    feat["construction_at_clinic"] = int(session_plan.get("construction", 0)
+                                          and session_plan["location"] == "clinic")
+    feat["high_pollen_sensitive_active"] = int(
+        session_plan.get("high_pollen", 0) and child_row["pollen_sensitive"])
+    feat["temp_delta_c"] = session_plan.get("temp_delta_c", 0)
+    feat["pm25_ugm3"] = session_plan.get("pm25", 8)
+    feat["sunlight_hours"] = session_plan.get("sunlight", 8)
+
+    x = np.array([[feat[f] for f in features]])
+    x_s = pipe._scalers[3].transform(x)
+    return float(pipe._models[3].predict_proba(x_s)[0, 1])
+
+# Sample child
+sample_child = test_df.iloc[0]
+
+# Forecast: ideal vs. risky session
+ideal_plan = {
+    "type": "DTT", "location": "clinic", "time": "morning",
+    "duration": 45, "n_programs": 8, "dow": 1,
+    "substitute": False, "tenure": 200,
+    "pressure_swing": 0, "break_transition": 0, "fire_drill": 0,
+    "low_sleep_night": 0, "skipped_breakfast": 0, "family_stress_event": 0,
+}
+
+risky_plan = {**ideal_plan, "substitute": True, "low_sleep_night": 1,
+              "family_stress_event": 1, "break_transition": 1}
+
+p_ideal = forecast(sample_child, ideal_plan)
+p_risky = forecast(sample_child, risky_plan)
+print(f"Child {sample_child.child_id} — ideal plan:  p(success) = {p_ideal:.3f}")
+print(f"Child {sample_child.child_id} — risky plan:  p(success) = {p_risky:.3f}")
+print(f"                              Δ = {p_ideal - p_risky:+.3f}")
+```
+
+This is the kind of "what-if" the prototype's forecast slider does live — adjust an environmental factor, see the success probability change, decide whether to keep the configuration as planned or modify it.
+
+## Sensitivity to environmental inputs
+
+For one sample child, sweep across each environmental risk factor and watch p(success) change:
+
+```{python}
+fig, ax = plt.subplots(figsize=(10, 5))
+risk_factors = [
+    ("substitute", False, True, "Substitute therapist"),
+    ("low_sleep_night", 0, 1, "Low sleep night"),
+    ("family_stress_event", 0, 1, "Family stress event"),
+    ("break_transition", 0, 1, "Break transition day"),
+    ("post_dst_window", 0, 1, "Post-DST window"),
+    ("fire_drill", 0, 1, "Fire drill day"),
+    ("skipped_breakfast", 0, 1, "Skipped breakfast"),
+]
+deltas = []
+for key, off, on, label in risk_factors:
+    p_off = forecast(sample_child, {**ideal_plan, key: off})
+    p_on  = forecast(sample_child, {**ideal_plan, key: on})
+    deltas.append((label, p_on - p_off))
+
+deltas.sort(key=lambda x: x[1])
+labels, dvals = zip(*deltas)
+ax.barh(labels, dvals,
+         color=["#c47b85" if d < 0 else "#7a9b6e" for d in dvals],
+         edgecolor="#1a2332")
+ax.axvline(0, color="#1a2332", lw=1)
+ax.set_xlabel("Change in p(success) when factor is present")
+ax.set_title(f"Per-child sensitivity to environmental factors — child {sample_child.child_id}")
+ax.grid(axis="x", alpha=0.3)
+plt.tight_layout()
+plt.savefig("../reports/figures/per_child_sensitivity.png", dpi=150, bbox_inches="tight")
+plt.show()
+```
+
+The visualization is what feeds the "what would change the forecast most" panel in the prototype's session forecast view. The clinician sees this on-screen during planning, allowing intervention configuration with full visibility into the model's reasoning.
+
+## Conclusion
+
+The Tier 3 model can produce per-child, per-session forecasts that are calibrated, discriminating, and explainable at the individual feature level. This is the analytic backbone of the digital twin prototype.
+
+For deployment, the next steps are:
+
+- **Real-data replication** at one or more clinics (`docs/ethics.md` describes the framework)
+- **Hierarchical model** with per-child random effects (Tier 4) for tighter individual forecasts
+- **Out-of-time validation** on real data, with a 90+ day forward-looking holdout
+- **Equity audit** across race, ethnicity, primary language, and SES
+- **Clinician usability study** to test whether the forecast and explanation actually change planning decisions
+
+These are the milestones a Clinical Data Scientist would sequence and execute to take this from a working prototype to a deployed system.

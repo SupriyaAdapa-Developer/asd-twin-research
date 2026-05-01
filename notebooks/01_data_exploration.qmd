@@ -1,0 +1,157 @@
+---
+title: "Data Exploration"
+subtitle: "Cohort, sessions, and environmental records"
+author: "ASD Digital Twin Research"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: cosmo
+    embed-resources: true
+execute:
+  warning: false
+jupyter: python3
+---
+
+## Overview
+
+This notebook is the entry point. It loads the three CSVs produced by `data/data_generation.py` and provides a guided tour of what's there. Everything downstream depends on these structures.
+
+```{python}
+import warnings; warnings.filterwarnings("ignore")
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+cohort = pd.read_csv("../data/synthetic_cohort.csv")
+sessions = pd.read_csv("../data/sessions.csv")
+env = pd.read_csv("../data/environmental.csv")
+
+print(f"Cohort:        {len(cohort):>7,} children")
+print(f"Sessions:      {len(sessions):>7,} session records")
+print(f"Environmental: {len(env):>7,} daily records")
+```
+
+## Cohort summary
+
+```{python}
+print("Severity distribution:")
+print(cohort["severity"].value_counts(normalize=True).round(3))
+print("\nSex distribution:")
+print(cohort["sex"].value_counts(normalize=True).round(3))
+print(f"\nAge: mean={cohort.age.mean():.1f}, range=[{cohort.age.min()}, {cohort.age.max()}]")
+print(f"\nADOS-2 CALSS: mean={cohort.ados_calss.mean():.1f}")
+print(f"SRS-2 T-score: mean={cohort.srs2_t.mean():.1f}")
+print(f"\nPollen-sensitive: {cohort.pollen_sensitive.mean():.1%}")
+print(f"Pressure-sensitive: {cohort.pressure_sensitive.mean():.1%}")
+```
+
+## Session-level distributions
+
+```{python}
+fig, axes = plt.subplots(2, 3, figsize=(13, 7))
+
+# Sessions per child
+sessions_per_child = sessions.groupby("child_id").size()
+axes[0,0].hist(sessions_per_child, bins=30, color="#7a9b6e", edgecolor="#1a2332")
+axes[0,0].set_title("Sessions per child")
+axes[0,0].set_xlabel("n sessions"); axes[0,0].set_ylabel("n children")
+
+# Session type mix
+sessions["session_type"].value_counts().plot(
+    kind="barh", color="#3a4f7a", ax=axes[0,1])
+axes[0,1].set_title("Session type distribution")
+
+# Outcomes
+outcomes = pd.Series({
+    "Success":   sessions["session_success"].mean(),
+    "Incident":  sessions["behavioral_incident"].mean(),
+    "Substitute": sessions["is_substitute"].mean(),
+    "Family stress": sessions["family_stress_event"].mean(),
+    "Low sleep":   sessions["low_sleep_night"].mean(),
+})
+axes[0,2].bar(range(len(outcomes)), outcomes.values * 100,
+              color=["#7a9b6e", "#c47b85", "#c97a4a", "#d4a04a", "#3a4f7a"],
+              edgecolor="#1a2332")
+axes[0,2].set_xticks(range(len(outcomes)))
+axes[0,2].set_xticklabels(outcomes.index, rotation=30, ha="right")
+axes[0,2].set_ylabel("% of sessions")
+axes[0,2].set_title("Outcome and risk-factor base rates")
+
+# Treatment integrity distribution
+axes[1,0].hist(sessions["treatment_integrity_pct"], bins=30,
+               color="#c97a4a", edgecolor="#1a2332")
+axes[1,0].axvline(80, color="red", ls="--", label="ABA threshold (80%)")
+axes[1,0].set_xlabel("Treatment integrity %"); axes[1,0].set_ylabel("n sessions")
+axes[1,0].set_title("Treatment integrity")
+axes[1,0].legend()
+
+# Time of day
+sessions["time_of_day"].value_counts().plot(
+    kind="bar", color="#d4a04a", ax=axes[1,1], edgecolor="#1a2332")
+axes[1,1].set_title("Time of day")
+axes[1,1].tick_params(axis='x', rotation=0)
+
+# Day of week
+dow_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+sessions["day_of_week"].value_counts().sort_index().plot(
+    kind="bar", color="#9b6cc4", ax=axes[1,2], edgecolor="#1a2332")
+axes[1,2].set_xticklabels([dow_labels[i] for i in range(7) if i in sessions.day_of_week.unique()],
+                           rotation=0)
+axes[1,2].set_title("Sessions by day of week")
+
+plt.tight_layout()
+plt.savefig("../reports/figures/eda_session_distributions.png", dpi=150, bbox_inches="tight")
+plt.show()
+```
+
+## Environmental data — sanity checks
+
+```{python}
+# Pressure swings should be relatively rare
+print(f"Days with |Δpressure| > 5 hPa: {env['pressure_swing'].mean():.1%}")
+print(f"High pollen days: {env['high_pollen'].mean():.1%}")
+print(f"School days: {env['is_school_day'].mean():.1%}")
+print(f"Break-transition days: {env['break_transition'].mean():.1%}")
+
+# Plot temperature seasonality for one zip
+fig, ax = plt.subplots(figsize=(11, 4))
+for zip_code in env["zip"].unique():
+    sub = env[env["zip"] == zip_code].copy()
+    sub["date"] = pd.to_datetime(sub["date"])
+    sub = sub.sort_values("date")
+    ax.plot(sub["date"], sub["temp_c"], label=zip_code, alpha=0.7, lw=1)
+ax.set_xlabel("Date"); ax.set_ylabel("Temperature (°C)")
+ax.set_title("Daily temperature by zip code — sanity check on seasonality")
+ax.legend(loc="upper right", frameon=False)
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig("../reports/figures/eda_temperature.png", dpi=150, bbox_inches="tight")
+plt.show()
+```
+
+## Outcome rates by demographic strata
+
+```{python}
+strata = sessions.merge(cohort[["child_id", "severity", "age", "sex"]], on="child_id")
+
+print("Success rate by severity:")
+print(strata.groupby("severity")["session_success"].agg(["mean", "count"]).round(3))
+
+print("\nSuccess rate by age band:")
+strata["age_band"] = pd.cut(strata["age"], bins=[2, 6, 9, 12, 17],
+                              labels=["3-6", "7-9", "10-12", "13-17"])
+print(strata.groupby("age_band", observed=True)["session_success"].agg(["mean", "count"]).round(3))
+
+print("\nSuccess rate by sex:")
+print(strata.groupby("sex")["session_success"].agg(["mean", "count"]).round(3))
+```
+
+The base-rate gradient by severity is consistent with published ABA outcome literature — children with more substantial support needs achieve criterion-level mastery on a smaller fraction of sessions, on average. This is descriptive, not normative.
+
+## Next steps
+
+- `02_baseline_models.qmd` — fit Tier 1 and Tier 2 models, establish what session-only data can predict
+- `03_butterfly_effects.qmd` — the headline analysis, adds the environmental layer
+- `04_twin_validation.qmd` — Bayesian hierarchical model, out-of-time validation

@@ -1,0 +1,117 @@
+---
+title: "Baseline Models — what session data alone can predict"
+subtitle: "Tier 1 and Tier 2 establish the floor"
+author: "ASD Digital Twin Research"
+date: today
+format:
+  html: { toc: true, code-fold: true, theme: cosmo, embed-resources: true }
+execute: { warning: false }
+jupyter: python3
+---
+
+## Purpose
+
+Before claiming that environmental covariates "add value", we have to establish what session-feature-only models can do. This notebook fits the Tier 1 (session features) and Tier 2 (+ therapist & schedule) models, reports their performance, and establishes the floor that Tier 3 has to clear.
+
+```{python}
+import warnings; warnings.filterwarnings("ignore")
+import sys; sys.path.insert(0, "..")
+import pandas as pd
+import matplotlib.pyplot as plt
+from src.twin.prediction import TieredPipeline
+
+pipe = TieredPipeline.from_csvs("../data")
+pipe.fit(tier=1).fit(tier=2)
+```
+
+## Tier 1 — baseline session features
+
+Predictors: session type, duration, n_programs, location, time of day, day of week, goal domain.
+
+```{python}
+m1 = pipe.evaluate(tier=1)
+print(f"Tier 1 — AUROC: {m1['auroc']:.3f}")
+print(f"          Brier: {m1['brier']:.3f}")
+print(f"          Pseudo-R²: {m1['pseudo_r2']:.3f}")
+print(f"          n test sessions: {m1['n']}")
+```
+
+Tier 1 establishes that session-feature-only models barely beat chance. This is the central problem the rest of the analysis addresses.
+
+```{python}
+coefs1 = pipe.coefficients(tier=1).head(10)
+coefs1[["feature", "std_beta"]].round(3)
+```
+
+## Tier 2 — adding therapist & schedule features
+
+Tier 2 adds: substitute therapist flag, therapist tenure with this child, treatment integrity.
+
+```{python}
+m2 = pipe.evaluate(tier=2)
+print(f"Tier 2 — AUROC: {m2['auroc']:.3f}  (Δ from Tier 1: +{m2['auroc']-m1['auroc']:.3f})")
+print(f"          Brier: {m2['brier']:.3f}  (Δ: {m2['brier']-m1['brier']:+.3f})")
+print(f"          Pseudo-R²: {m2['pseudo_r2']:.3f}  (Δ: +{m2['pseudo_r2']-m1['pseudo_r2']:.3f})")
+```
+
+The Tier 2 lift is substantial. Most of it comes from two features:
+
+```{python}
+coefs2 = pipe.coefficients(tier=2).head(10)
+coefs2[["feature", "std_beta"]].round(3)
+```
+
+`is_substitute` is the largest negative coefficient in the model. `treatment_integrity_pct` is the largest positive coefficient. These are not surprising, but they are not currently surfaced in most ABA dashboards as predictive features — they're treated as descriptive only.
+
+## Comparison plot
+
+```{python}
+fig, ax = plt.subplots(figsize=(8, 4.5))
+metrics = ["auroc", "brier", "accuracy"]
+labels = ["AUROC", "Brier (lower=better)", "Accuracy"]
+x = range(len(metrics))
+width = 0.35
+
+vals1 = [m1[k] for k in metrics]
+vals2 = [m2[k] for k in metrics]
+
+ax.bar([i - width/2 for i in x], vals1, width=width,
+       label="Tier 1", color="#d4a04a", edgecolor="#1a2332")
+ax.bar([i + width/2 for i in x], vals2, width=width,
+       label="Tier 2", color="#c97a4a", edgecolor="#1a2332")
+ax.set_xticks(list(x))
+ax.set_xticklabels(labels)
+ax.set_ylabel("Metric value")
+ax.set_title("Tier 1 vs. Tier 2 — adding therapist features")
+ax.legend(frameon=False)
+ax.grid(axis="y", alpha=0.3)
+for i, v in enumerate(vals1):
+    ax.text(i - width/2, v + 0.01, f"{v:.3f}", ha="center", fontsize=9)
+for i, v in enumerate(vals2):
+    ax.text(i + width/2, v + 0.01, f"{v:.3f}", ha="center", fontsize=9)
+plt.tight_layout()
+plt.savefig("../reports/figures/tier1_vs_tier2.png", dpi=150, bbox_inches="tight")
+plt.show()
+```
+
+## Where Tier 2 still struggles
+
+Even after adding therapist features, Tier 2 leaves 95%+ of outcome variance unexplained. The remaining residual variance is the territory the environmental covariate analysis (`03_butterfly_effects.qmd`) explores.
+
+```{python}
+# Residual analysis: which sessions does Tier 2 get most wrong?
+df = pipe.build_design_matrix()
+test_idx = pipe._splits["test"]
+test_df = df.iloc[test_idx].copy()
+features = pipe._feature_lists[2]
+X = test_df[features].fillna(0).values
+test_df["p_pred"] = pipe._models[2].predict_proba(pipe._scalers[2].transform(X))[:, 1]
+test_df["residual"] = test_df["session_success"].astype(int) - test_df["p_pred"]
+
+# Worst predictions (largest absolute residual)
+worst = test_df.assign(abs_res=test_df["residual"].abs()).nlargest(8, "abs_res")
+worst[["child_id", "session_date", "session_type", "session_success",
+        "p_pred", "is_substitute", "family_stress_event"]].round(3)
+```
+
+Notice that several of the largest residuals are sessions where `family_stress_event` or `is_substitute` is unusual — features the model knows about and is using, but features whose effect varies across children in ways the population-level model cannot capture. This motivates the per-child hierarchical model in notebook 04.

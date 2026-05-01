@@ -1,0 +1,119 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asd-twin-research"
+version = "0.4.0"
+description = "ASD Digital Twin — clinical data science investigation of environmental covariates in ABA outcomes"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+    { name = "ASD Digital Twin Research" },
+]
+keywords = [
+    "autism", "ABA", "applied-behavior-analysis", "clinical-data-science",
+    "digital-twin", "BCBA", "behavioral-analytics", "reproducible-research",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+    "pandas>=2.2.0,<3.0",
+    "numpy>=1.26.0,<2.5",
+    "scikit-learn>=1.4.0,<2.0",
+    "scipy>=1.11.0,<2.0",
+    "matplotlib>=3.8.0,<4.0",
+]
+
+[project.optional-dependencies]
+# Statistical & Bayesian extras (for Tier 4 hierarchical model)
+stats = [
+    "statsmodels>=0.14.0",
+    "pymc>=5.10.0",
+    "arviz>=0.17.0",
+]
+
+# Tree-based secondary models
+boosting = [
+    "lightgbm>=4.3.0",
+]
+
+# Notebook rendering
+notebooks = [
+    "jupyter>=1.0.0",
+    "nbformat>=5.9.0",
+    "nbclient>=0.9.0",
+    "ipykernel>=6.28.0",
+]
+
+# Development tooling
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.2.0",
+    "mypy>=1.8.0",
+]
+
+# Everything
+all = [
+    "asd-twin-research[stats,boosting,notebooks,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourname/asd-twin-research"
+Documentation = "https://github.com/yourname/asd-twin-research/blob/main/README.md"
+Repository = "https://github.com/yourname/asd-twin-research"
+"Pre-registration" = "https://osf.io/<your-osf-id>"
+"Issue Tracker" = "https://github.com/yourname/asd-twin-research/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-W ignore::FutureWarning",
+    "-W ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # line-too-long handled by formatter
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
