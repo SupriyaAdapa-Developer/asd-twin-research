@@ -2,6 +2,7 @@
 
 > **A clinical data science investigation of why "unexplained" regression in autism therapy isn't actually unexplained — and what a digital twin trained on the right covariates can do about it.**
 
+[![tests](https://github.com/SupriyaAdapa-Developer/asd-twin-research/actions/workflows/test.yml/badge.svg)](https://github.com/SupriyaAdapa-Developer/asd-twin-research/actions/workflows/test.yml)
 [![Reproducible](https://img.shields.io/badge/reproducible-quarto-blue)](https://quarto.org)
 [![Pre-registered](https://img.shields.io/badge/pre--registered-OSF-yellow)](docs/osf_preregistration.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -145,14 +146,12 @@ Anything reported in this analysis that wasn't pre-registered is explicitly flag
 
 ## Citation
 
-If this work informs your clinical practice or research, please cite:
-
 ```bibtex
 @misc{asd_twin_2026,
   title  = {ASD Digital Twin: A Clinical Data Science Investigation of Environmental Covariates in Behavioral Therapy Outcomes},
-  author = {<Your Name>},
+  author = {<Supriya Adapa>},
   year   = {2026},
-  url    = {https://github.com/<you>/asd-twin-research},
+  url    = {https://github.com/SupriyaAdapa-Developer/asd-twin-research},
   note   = {Pre-registered on OSF: <doi>}
 }
 ```

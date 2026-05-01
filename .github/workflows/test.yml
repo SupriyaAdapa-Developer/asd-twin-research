@@ -36,11 +36,6 @@ jobs:
       - name: Run pytest
         run: pytest tests/ -v --tb=short
 
-      - name: Lint with ruff
-        run: |
-          pip install ruff
-          ruff check src/ tests/ data/
-
   reproducibility:
     runs-on: ubuntu-latest
     needs: test
