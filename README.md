@@ -2,6 +2,7 @@
 
 > **A clinical data science investigation of why "unexplained" regression in autism therapy isn't actually unexplained — and what a digital twin trained on the right covariates can do about it.**
 
+[![tests](https://github.com/SupriyaAdapa-Developer/asd-twin-research/actions/workflows/test.yml/badge.svg)](https://github.com/SupriyaAdapa-Developer/asd-twin-research/actions/workflows/test.yml)
 [![Reproducible](https://img.shields.io/badge/reproducible-quarto-blue)](https://quarto.org)
 [![Pre-registered](https://img.shields.io/badge/pre--registered-OSF-yellow)](docs/osf_preregistration.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
